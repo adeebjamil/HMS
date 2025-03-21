@@ -3,11 +3,16 @@ import { Link } from 'react-router-dom';
 import { getPatientProfile, getPatientAppointments, cancelAppointment } from '../api/patientApi';
 import { toast } from 'react-toastify';
 
-export default function PatientDashboard() {
+export default function PatientDashboard({ activeTab = 'overview' }) {
   const [patient, setPatient] = useState(null);
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('appointments');
+  const [currentTab, setCurrentTab] = useState(activeTab);
+
+  useEffect(() => {
+    // Update the active tab when the prop changes
+    setCurrentTab(activeTab);
+  }, [activeTab]);
 
   useEffect(() => {
     const fetchPatientData = async () => {
@@ -56,11 +61,214 @@ export default function PatientDashboard() {
     );
   }
 
+  // Show different content based on active tab
+  const renderContent = () => {
+    switch (currentTab) {
+      case 'overview':
+        return (
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h3 className="text-xl font-semibold mb-4">Recent Activity</h3>
+            <p className="text-gray-600 mb-6">Welcome to your patient dashboard. Here's a summary of your recent activity.</p>
+            
+            {/* Quick stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                <h4 className="text-sm font-medium text-blue-700 mb-2">Upcoming Appointments</h4>
+                <p className="text-2xl font-bold text-blue-800">
+                  {appointments.filter(app => 
+                    ['Pending', 'Confirmed'].includes(app.status) &&
+                    new Date(app.appointmentDate) >= new Date()
+                  ).length}
+                </p>
+              </div>
+              
+              <div className="bg-green-50 p-4 rounded-lg border border-green-100">
+                <h4 className="text-sm font-medium text-green-700 mb-2">Completed Appointments</h4>
+                <p className="text-2xl font-bold text-green-800">
+                  {appointments.filter(app => app.status === 'Completed').length}
+                </p>
+              </div>
+              
+              <div className="bg-purple-50 p-4 rounded-lg border border-purple-100">
+                <h4 className="text-sm font-medium text-purple-700 mb-2">Active Prescriptions</h4>
+                <p className="text-2xl font-bold text-purple-800">
+                  {appointments.filter(app => app.prescription).length}
+                </p>
+              </div>
+            </div>
+            
+            {/* Next appointment */}
+            <h3 className="text-lg font-semibold mb-3">Next Appointment</h3>
+            {(() => {
+              const nextAppointment = appointments
+                .filter(app => ['Pending', 'Confirmed'].includes(app.status) && new Date(app.appointmentDate) >= new Date())
+                .sort((a, b) => new Date(a.appointmentDate) - new Date(b.appointmentDate))[0];
+                
+              if (nextAppointment) {
+                return (
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="font-medium">Dr. {nextAppointment.doctor.name}</p>
+                        <p className="text-sm text-gray-600">{nextAppointment.doctor.department}</p>
+                        <p className="text-sm mt-2">
+                          {new Date(nextAppointment.appointmentDate).toLocaleDateString()} at {nextAppointment.timeSlot}
+                        </p>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium
+                        ${nextAppointment.status === 'Confirmed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                        {nextAppointment.status}
+                      </span>
+                    </div>
+                  </div>
+                );
+              } else {
+                return <p className="text-gray-500">No upcoming appointments.</p>;
+              }
+            })()}
+          </div>
+        );
+        
+      case 'appointments':
+        return (
+          <div>
+            <div className="flex justify-end mb-4">
+              <button
+                onClick={() => window.location.href = "/patient/book-appointment"}
+                className="bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded-md transition-colors"
+              >
+                Book New Appointment
+              </button>
+            </div>
+            
+            {appointments.length === 0 ? (
+              <div className="text-center py-12 bg-white rounded-lg shadow">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <p className="text-gray-600">You don't have any appointments yet.</p>
+                <p className="mt-2 text-gray-500">Book an appointment to get started!</p>
+              </div>
+            ) : (
+              <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Doctor
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date & Time
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {appointments.map((appointment) => (
+                      <tr key={appointment._id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">
+                                Dr. {appointment.doctor.name}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {appointment.doctor.department}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {new Date(appointment.appointmentDate).toLocaleDateString()}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {appointment.timeSlot}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                            ${appointment.status === 'Confirmed' ? 'bg-green-100 text-green-800' : 
+                              appointment.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' : 
+                              appointment.status === 'Cancelled' ? 'bg-red-100 text-red-800' : 
+                              'bg-blue-100 text-blue-800'}`}>
+                            {appointment.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          {appointment.status !== 'Cancelled' && appointment.status !== 'Completed' && (
+                            <button
+                              onClick={() => handleCancelAppointment(appointment._id)}
+                              className="text-red-600 hover:text-red-900 mr-4"
+                            >
+                              Cancel
+                            </button>
+                          )}
+                          {appointment.status === 'Confirmed' || appointment.status === 'Completed' ? (
+                            <Link 
+                              to={generateBillLink(appointment._id)}
+                              className="text-primary-600 hover:text-primary-900"
+                            >
+                              View Bill
+                            </Link>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+        
+      case 'medicalHistory':
+        return (
+          <div className="bg-white shadow-md rounded-lg p-6">
+            <h3 className="text-xl font-semibold mb-4">Medical History</h3>
+            
+            {patient?.medicalHistory && patient.medicalHistory.length > 0 ? (
+              <ul className="space-y-3">
+                {patient.medicalHistory.map((item, index) => (
+                  <li key={index} className="p-3 bg-gray-50 rounded-md">{item}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-500">No medical history records available.</p>
+            )}
+            
+            <div className="mt-8">
+              <h4 className="text-lg font-medium mb-3">Allergies</h4>
+              {patient?.allergies && patient.allergies.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {patient.allergies.map((allergy, index) => (
+                    <span key={index} className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm">
+                      {allergy}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500">No allergies recorded.</p>
+              )}
+            </div>
+          </div>
+        );
+        
+      default:
+        return <div>Select a section from the sidebar</div>;
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold text-primary-700 mb-8">Patient Dashboard</h1>
       
-      {/* Profile Summary */}
+      {/* Profile Summary - Always show on all pages */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
         <div className="flex items-center">
           <div className="rounded-full bg-primary-100 p-3 mr-4">
@@ -88,174 +296,10 @@ export default function PatientDashboard() {
             <p className="font-medium">{patient?.bloodGroup || 'Not specified'}</p>
           </div>
         </div>
-        
-        <div className="mt-6 flex justify-end">
-          <Link 
-            to="/patient/profile/edit" 
-            className="text-primary-600 hover:text-primary-800 font-medium flex items-center"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-            </svg>
-            Edit Profile
-          </Link>
-        </div>
       </div>
       
-      {/* Tabs */}
-      <div className="mb-6 border-b border-gray-200">
-        <nav className="flex -mb-px">
-          <button
-            onClick={() => setActiveTab('appointments')}
-            className={`mr-8 py-4 px-1 ${
-              activeTab === 'appointments'
-                ? 'border-b-2 border-primary-500 text-primary-600 font-medium'
-                : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Appointments
-          </button>
-          <button
-            onClick={() => setActiveTab('medicalHistory')}
-            className={`mr-8 py-4 px-1 ${
-              activeTab === 'medicalHistory'
-                ? 'border-b-2 border-primary-500 text-primary-600 font-medium'
-                : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Medical History
-          </button>
-        </nav>
-      </div>
-      
-      {/* Tab Content */}
-      {activeTab === 'appointments' && (
-        <div>
-          <div className="flex justify-end mb-4">
-            <Link
-              to="/patient/book-appointment"
-              className="bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded-md transition-colors"
-            >
-              Book New Appointment
-            </Link>
-          </div>
-          
-          {appointments.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-lg shadow">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <p className="text-gray-600">You don't have any appointments yet.</p>
-              <p className="mt-2 text-gray-500">Book an appointment to get started!</p>
-            </div>
-          ) : (
-            <div className="bg-white shadow-md rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Doctor
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Date & Time
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {appointments.map((appointment) => (
-                    <tr key={appointment._id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">
-                              Dr. {appointment.doctor.name}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {appointment.doctor.department}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {new Date(appointment.appointmentDate).toLocaleDateString()}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {appointment.timeSlot}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                          ${appointment.status === 'Confirmed' ? 'bg-green-100 text-green-800' : 
-                            appointment.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' : 
-                            appointment.status === 'Cancelled' ? 'bg-red-100 text-red-800' : 
-                            'bg-blue-100 text-blue-800'}`}>
-                          {appointment.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        {appointment.status !== 'Cancelled' && appointment.status !== 'Completed' && (
-                          <button
-                            onClick={() => handleCancelAppointment(appointment._id)}
-                            className="text-red-600 hover:text-red-900 mr-4"
-                          >
-                            Cancel
-                          </button>
-                        )}
-                        {appointment.status === 'Confirmed' || appointment.status === 'Completed' ? (
-                          <Link 
-                            to={generateBillLink(appointment._id)}
-                            className="text-primary-600 hover:text-primary-900"
-                          >
-                            View Bill
-                          </Link>
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-      
-      {activeTab === 'medicalHistory' && (
-        <div className="bg-white shadow-md rounded-lg p-6">
-          <h3 className="text-xl font-semibold mb-4">Medical History</h3>
-          
-          {patient?.medicalHistory && patient.medicalHistory.length > 0 ? (
-            <ul className="space-y-3">
-              {patient.medicalHistory.map((item, index) => (
-                <li key={index} className="p-3 bg-gray-50 rounded-md">{item}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-gray-500">No medical history records available.</p>
-          )}
-          
-          <div className="mt-8">
-            <h4 className="text-lg font-medium mb-3">Allergies</h4>
-            {patient?.allergies && patient.allergies.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {patient.allergies.map((allergy, index) => (
-                  <span key={index} className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm">
-                    {allergy}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500">No allergies recorded.</p>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Content section */}
+      {renderContent()}
     </div>
   );
 }

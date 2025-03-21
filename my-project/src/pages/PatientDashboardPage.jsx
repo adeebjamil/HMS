@@ -5,6 +5,7 @@ import PatientDashboard from '../components/PatientDashboard';
 import PatientProfile from '../components/PatientProfile';
 import Booking from '../components/Booking';
 import Payment from '../components/Payment';
+import PaymentHistory from '../components/PaymentHistory';
 import PatientSidebar from '../components/PatientSidebar';
 import { toast } from 'react-toastify';
 
@@ -32,18 +33,22 @@ export default function PatientDashboardPage() {
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <PatientDashboard />;
+        return <PatientDashboard activeTab="overview" />;
+      case 'appointments':
+        return <PatientDashboard activeTab="appointments" />;
       case 'booking':
         return <Booking onBookingComplete={handleBookingComplete} />;
       case 'payment':
         if (!bookingData) return <Navigate to="/patient/dashboard" />;
         return <Payment bookingData={bookingData} onPaymentComplete={handlePaymentComplete} />;
-      case 'profile':
-        return <PatientProfile />;
       case 'history':
         return <PatientDashboard activeTab="medicalHistory" />;
+      case 'payments':
+        return <PaymentHistory />;
+      case 'profile':
+        return <PatientProfile />;
       default:
-        return <PatientDashboard />;
+        return <PatientDashboard activeTab="overview" />;
     }
   };
 

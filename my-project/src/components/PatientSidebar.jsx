@@ -31,6 +31,7 @@ export default function PatientSidebar({ activePage, setCurrentPage }) {
       {/* Navigation */}
       <nav className="flex-1 pt-5 pb-4 overflow-y-auto">
         <ul className="space-y-1 px-2">
+          {/* Dashboard */}
           <li>
             <button
               onClick={() => setCurrentPage('dashboard')}
@@ -44,6 +45,23 @@ export default function PatientSidebar({ activePage, setCurrentPage }) {
               {!collapsed && <span>Dashboard</span>}
             </button>
           </li>
+          
+          {/* Appointments */}
+          <li>
+            <button
+              onClick={() => setCurrentPage('appointments')}
+              className={`flex items-center px-4 py-3 w-full text-left rounded-lg ${
+                activePage === 'appointments' ? 'bg-primary-100 text-primary-700' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {!collapsed && <span>My Appointments</span>}
+            </button>
+          </li>
+          
+          {/* Book Appointment */}
           <li>
             <button
               onClick={() => setCurrentPage('booking')}
@@ -57,6 +75,8 @@ export default function PatientSidebar({ activePage, setCurrentPage }) {
               {!collapsed && <span>Book Appointment</span>}
             </button>
           </li>
+          
+          {/* Medical History */}
           <li>
             <button
               onClick={() => setCurrentPage('history')}
@@ -70,6 +90,23 @@ export default function PatientSidebar({ activePage, setCurrentPage }) {
               {!collapsed && <span>Medical History</span>}
             </button>
           </li>
+          
+          {/* My Payments */}
+          <li>
+            <button
+              onClick={() => setCurrentPage('payments')}
+              className={`flex items-center px-4 py-3 w-full text-left rounded-lg ${
+                activePage === 'payments' ? 'bg-primary-100 text-primary-700' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+              {!collapsed && <span>My Payments</span>}
+            </button>
+          </li>
+          
+          {/* My Profile */}
           <li>
             <button
               onClick={() => setCurrentPage('profile')}
