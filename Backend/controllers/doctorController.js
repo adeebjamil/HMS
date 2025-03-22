@@ -1,5 +1,7 @@
 const Doctor = require('../models/Doctor');
 const Appointment = require('../models/Appointment');
+const Referral = require('../models/Referral');
+const Patient = require('../models/Patient'); // Add this missing import
 
 // Get doctor profile
 const getDoctorProfile = async (req, res) => {
@@ -164,6 +166,190 @@ const getDoctorsByDepartment = async (req, res) => {
   }
 };
 
+// Get patients for a doctor
+const getDoctorPatients = async (req, res) => {
+  try {
+    console.log('Getting patients for doctor:', req.user._id);
+    
+    // Get all appointments for this doctor
+    const appointments = await Appointment.find({ doctor: req.user._id })
+      .populate('patient', 'name email phoneNumber age gender bloodGroup medicalHistory allergies')
+      .sort({ appointmentDate: -1 });
+    
+    // Create a map to store unique patients with their appointment history
+    const patientMap = new Map();
+    
+    // Process appointments to build patient data
+    appointments.forEach(app => {
+      if (!app.patient) return;
+      
+      const patientId = app.patient._id.toString();
+      
+      if (!patientMap.has(patientId)) {
+        // For first occurrence, create the patient object
+        patientMap.set(patientId, {
+          _id: app.patient._id,
+          name: app.patient.name,
+          email: app.patient.email,
+          phone: app.patient.phoneNumber,
+          age: app.patient.age,
+          gender: app.patient.gender,
+          bloodGroup: app.patient.bloodGroup,
+          medicalHistory: app.patient.medicalHistory || [],
+          allergies: app.patient.allergies || [],
+          lastVisit: new Date(app.appointmentDate), // Initial value
+          totalVisits: app.status === 'Completed' ? 1 : 0,
+          appointments: [{
+            _id: app._id,
+            appointmentDate: app.appointmentDate,
+            timeSlot: app.timeSlot,
+            status: app.status,
+            type: app.type || 'Consultation',
+            problem: app.problem,
+            prescription: app.prescription
+          }]
+        });
+      } else {
+        // For existing patients, update data and add appointment
+        const patient = patientMap.get(patientId);
+        
+        // Update last visit if newer
+        const appDate = new Date(app.appointmentDate);
+        if (appDate > patient.lastVisit) {
+          patient.lastVisit = appDate;
+        }
+        
+        // Increment total visits if completed
+        if (app.status === 'Completed') {
+          patient.totalVisits += 1;
+        }
+        
+        // Add appointment to history
+        patient.appointments.push({
+          _id: app._id,
+          appointmentDate: app.appointmentDate,
+          timeSlot: app.timeSlot,
+          status: app.status,
+          type: app.type || 'Consultation',
+          problem: app.problem,
+          prescription: app.prescription
+        });
+      }
+    });
+    
+    // Convert map to array
+    const patients = Array.from(patientMap.values());
+    
+    console.log(`Found ${patients.length} patients for doctor ${req.user._id}`);
+    
+    res.json(patients);
+  } catch (error) {
+    console.error('Error in getDoctorPatients:', error);
+    res.status(500).json({ error: 'Failed to fetch patients' });
+  }
+};
+
+// Create a referral to another doctor
+const createReferral = async (req, res) => {
+  try {
+    const { patientId, doctorId, referralDate, notes } = req.body;
+    
+    // Check if patient exists
+    const patient = await Patient.findById(patientId);
+    if (!patient) {
+      return res.status(404).json({ error: 'Patient not found' });
+    }
+    
+    // Check if doctor exists
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor) {
+      return res.status(404).json({ error: 'Doctor not found' });
+    }
+    
+    // Create referral
+    const referral = new Referral({
+      patient: patientId,
+      fromDoctor: req.user._id,
+      toDoctor: doctorId,
+      referralDate: new Date(referralDate),
+      notes
+    });
+    
+    const savedReferral = await referral.save();
+    
+    // Populate doctor and patient info for response
+    const populatedReferral = await Referral.findById(savedReferral._id)
+      .populate('patient', 'name email age gender')
+      .populate('fromDoctor', 'name department specialization')
+      .populate('toDoctor', 'name department specialization');
+    
+    res.status(201).json(populatedReferral);
+  } catch (error) {
+    console.error('Error creating referral:', error);
+    res.status(500).json({ error: 'Failed to create referral' });
+  }
+};
+
+// Get referrals sent by this doctor
+const getSentReferrals = async (req, res) => {
+  try {
+    const referrals = await Referral.find({ fromDoctor: req.user._id })
+      .populate('patient', 'name email age gender')
+      .populate('toDoctor', 'name department specialization')
+      .sort({ createdAt: -1 });
+    
+    res.json(referrals);
+  } catch (error) {
+    console.error('Error getting sent referrals:', error);
+    res.status(500).json({ error: 'Failed to get referrals' });
+  }
+};
+
+// Get referrals received by this doctor
+const getReceivedReferrals = async (req, res) => {
+  try {
+    const referrals = await Referral.find({ toDoctor: req.user._id })
+      .populate('patient', 'name email age gender')
+      .populate('fromDoctor', 'name department specialization')
+      .sort({ createdAt: -1 });
+    
+    res.json(referrals);
+  } catch (error) {
+    console.error('Error getting received referrals:', error);
+    res.status(500).json({ error: 'Failed to get referrals' });
+  }
+};
+
+// Update referral status (accept/decline)
+const updateReferralStatus = async (req, res) => {
+  try {
+    const { referralId } = req.params;
+    const { action } = req.params;
+    
+    if (!['accept', 'decline'].includes(action)) {
+      return res.status(400).json({ error: 'Invalid action' });
+    }
+    
+    const referral = await Referral.findById(referralId);
+    if (!referral) {
+      return res.status(404).json({ error: 'Referral not found' });
+    }
+    
+    // Check if this doctor is authorized to update this referral
+    if (referral.toDoctor.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Not authorized to update this referral' });
+    }
+    
+    referral.status = action === 'accept' ? 'accepted' : 'declined';
+    const updatedReferral = await referral.save();
+    
+    res.json(updatedReferral);
+  } catch (error) {
+    console.error(`Error ${req.params.action}ing referral:`, error);
+    res.status(500).json({ error: `Failed to ${req.params.action} referral` });
+  }
+};
+
 module.exports = {
   getDoctorProfile,
   updateDoctorProfile,
@@ -171,5 +357,10 @@ module.exports = {
   updateAppointmentStatus,
   addPrescription,
   getAllDoctors,
-  getDoctorsByDepartment
+  getDoctorsByDepartment,
+  getDoctorPatients,
+  createReferral,
+  getSentReferrals,
+  getReceivedReferrals,
+  updateReferralStatus
 };

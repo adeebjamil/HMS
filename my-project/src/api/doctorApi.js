@@ -87,3 +87,30 @@ export const getDoctorsByDepartment = async (department) => {
     throw error.response?.data?.error || 'Failed to fetch doctors';
   }
 };
+
+// Get doctor patients
+export const getDoctorPatients = async () => {
+  try {
+    // The correct endpoint is 'doctor/patients'
+    const response = await axios.get(`${API_URL}/patients`, getConfig());
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching doctor patients:', error);
+    throw new Error('Failed to fetch patients');
+  }
+};
+
+// Refer patient to another doctor
+export const referPatientToDoctor = async (patientId, doctorId, notes) => {
+  try {
+    const response = await axios.post(`${API_URL}/refer`, {
+      patientId,
+      doctorId,
+      notes
+    }, getConfig());
+    return response.data;
+  } catch (error) {
+    console.error('Error referring patient:', error);
+    throw error.response?.data?.error || 'Failed to refer patient';
+  }
+};
