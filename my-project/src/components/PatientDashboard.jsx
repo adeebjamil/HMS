@@ -132,15 +132,6 @@ export default function PatientDashboard({ activeTab = 'overview' }) {
       case 'appointments':
         return (
           <div>
-            <div className="flex justify-end mb-4">
-              <button
-                onClick={() => window.location.href = "/patient/book-appointment"}
-                className="bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded-md transition-colors"
-              >
-                Book New Appointment
-              </button>
-            </div>
-            
             {appointments.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-lg shadow">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
