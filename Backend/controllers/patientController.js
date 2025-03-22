@@ -1,8 +1,10 @@
+const asyncHandler = require('express-async-handler');
 const Patient = require('../models/Patient');
 const Appointment = require('../models/Appointment');
 const Doctor = require('../models/Doctor');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
+const generateToken = require('../utils/generateToken');
 
 // Initialize Razorpay with better error handling
 let razorpay;
@@ -280,6 +282,43 @@ const generateBill = async (req, res) => {
   }
 };
 
+// Add this function to your existing controller
+const changePassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  
+  if (!currentPassword || !newPassword) {
+    res.status(400);
+    throw new Error('Please provide current and new passwords');
+  }
+  
+  const patient = await Patient.findById(req.user._id);
+  
+  if (!patient) {
+    res.status(404);
+    throw new Error('Patient not found');
+  }
+  
+  // Check if current password matches
+  const isMatch = await patient.matchPassword(currentPassword);
+  
+  if (!isMatch) {
+    res.status(401);
+    throw new Error('Current password is incorrect');
+  }
+  
+  // Update password
+  patient.password = newPassword;
+  await patient.save();
+  
+  // Generate new token
+  const token = generateToken(patient._id);
+  
+  res.json({
+    message: 'Password updated successfully',
+    token
+  });
+});
+
 module.exports = {
   getPatientProfile,
   updatePatientProfile,
@@ -287,5 +326,6 @@ module.exports = {
   verifyPayment,
   getPatientAppointments,
   cancelAppointment,
-  generateBill
+  generateBill,
+  changePassword
 };

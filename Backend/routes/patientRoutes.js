@@ -7,7 +7,8 @@ const {
   verifyPayment,
   getPatientAppointments,
   cancelAppointment,
-  generateBill
+  generateBill,
+  changePassword
 } = require('../controllers/patientController');
 const { protect, patientOnly } = require('../middleware/authMiddleware');
 
@@ -19,5 +20,6 @@ router.post('/payment/verify', protect, patientOnly, verifyPayment);
 router.get('/appointments', protect, patientOnly, getPatientAppointments);
 router.put('/appointment/:appointmentId/cancel', protect, patientOnly, cancelAppointment);
 router.get('/bill/:appointmentId', protect, patientOnly, generateBill);
+router.put('/change-password', protect, patientOnly, changePassword);
 
 module.exports = router;

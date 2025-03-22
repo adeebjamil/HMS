@@ -53,4 +53,11 @@ const patientOnly = (req, res, next) => {
   }
 };
 
-module.exports = { protect, doctorOnly, patientOnly };
+// Check the export names - you're importing 'doctorProtect' but it might be called 'doctorOnly'
+
+// Make sure these exports match what you're importing
+module.exports = {
+  protect,
+  doctorOnly,   // This should match what you're importing in reportRoutes.js
+  patientOnly
+};

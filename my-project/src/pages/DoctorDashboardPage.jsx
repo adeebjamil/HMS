@@ -8,6 +8,7 @@ import DoctortoDoctor from '../components/DoctortoDoctor';
 import DoctorSidebar from '../components/DoctorSidebar';
 import ReferralMessages from '../components/ReferralMessages';
 import Reports from '../components/Reports';
+import Settings from '../components/Settings'; // Import the new Settings component
 
 export default function DoctorDashboardPage() {
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -53,7 +54,8 @@ export default function DoctorDashboardPage() {
       case 'profile':
         return <DoctorProfile key="profile-component" />;
       case 'settings':
-        return <DoctorProfile key="settings-component" isSettings={true} />;
+        // Use the new dedicated Settings component instead of DoctorProfile with isSettings=true
+        return <Settings key="settings-component" />;
       default:
         return <DoctorDashboard key="default-component" activeTab="overview" />;
     }

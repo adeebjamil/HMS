@@ -12,7 +12,8 @@ const {
   createReferral,
   getSentReferrals,
   getReceivedReferrals,
-  updateReferralStatus
+  updateReferralStatus,
+  changePassword
 } = require('../controllers/doctorController');
 const { protect, doctorOnly } = require('../middleware/authMiddleware');
 
@@ -33,5 +34,6 @@ router.post('/refer', protect, doctorOnly, createReferral);
 router.get('/referrals/sent', protect, doctorOnly, getSentReferrals);
 router.get('/referrals/received', protect, doctorOnly, getReceivedReferrals);
 router.put('/referrals/:referralId/:action', protect, doctorOnly, updateReferralStatus);
+router.put('/change-password', protect, doctorOnly, changePassword);
 
 module.exports = router;

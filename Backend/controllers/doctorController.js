@@ -2,9 +2,11 @@ const Doctor = require('../models/Doctor');
 const Appointment = require('../models/Appointment');
 const Referral = require('../models/Referral');
 const Patient = require('../models/Patient'); // Add this missing import
+const asyncHandler = require('express-async-handler'); // Add this missing import
+const generateToken = require('../utils/generateToken'); // Add this missing import
 
 // Get doctor profile
-const getDoctorProfile = async (req, res) => {
+const getDoctorProfile = asyncHandler(async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.user._id).select('-password');
     
@@ -17,10 +19,10 @@ const getDoctorProfile = async (req, res) => {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
   }
-};
+});
 
 // Update doctor profile
-const updateDoctorProfile = async (req, res) => {
+const updateDoctorProfile = asyncHandler(async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.user._id);
     
@@ -62,10 +64,10 @@ const updateDoctorProfile = async (req, res) => {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
   }
-};
+});
 
 // Get doctor's appointments
-const getDoctorAppointments = async (req, res) => {
+const getDoctorAppointments = asyncHandler(async (req, res) => {
   try {
     const appointments = await Appointment.find({ doctor: req.user._id })
       .populate('patient', 'name email phoneNumber age gender')
@@ -76,10 +78,10 @@ const getDoctorAppointments = async (req, res) => {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
   }
-};
+});
 
 // Update appointment status
-const updateAppointmentStatus = async (req, res) => {
+const updateAppointmentStatus = asyncHandler(async (req, res) => {
   try {
     const { appointmentId, status } = req.body;
     
@@ -102,10 +104,10 @@ const updateAppointmentStatus = async (req, res) => {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
   }
-};
+});
 
 // Add prescription to appointment
-const addPrescription = async (req, res) => {
+const addPrescription = asyncHandler(async (req, res) => {
   try {
     const { appointmentId, medications, notes, followUpDate } = req.body;
     
@@ -132,10 +134,10 @@ const addPrescription = async (req, res) => {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
   }
-};
+});
 
 // Get all doctors (for patient booking)
-const getAllDoctors = async (req, res) => {
+const getAllDoctors = asyncHandler(async (req, res) => {
   try {
     // Modified to return all doctors regardless of approval status
     const doctors = await Doctor.find({})
@@ -147,10 +149,10 @@ const getAllDoctors = async (req, res) => {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
   }
-};
+});
 
 // Get doctors by department
-const getDoctorsByDepartment = async (req, res) => {
+const getDoctorsByDepartment = asyncHandler(async (req, res) => {
   try {
     const { department } = req.params;
     
@@ -164,10 +166,10 @@ const getDoctorsByDepartment = async (req, res) => {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
   }
-};
+});
 
 // Get patients for a doctor
-const getDoctorPatients = async (req, res) => {
+const getDoctorPatients = asyncHandler(async (req, res) => {
   try {
     console.log('Getting patients for doctor:', req.user._id);
     
@@ -247,10 +249,10 @@ const getDoctorPatients = async (req, res) => {
     console.error('Error in getDoctorPatients:', error);
     res.status(500).json({ error: 'Failed to fetch patients' });
   }
-};
+});
 
 // Create a referral to another doctor
-const createReferral = async (req, res) => {
+const createReferral = asyncHandler(async (req, res) => {
   try {
     const { patientId, doctorId, referralDate, notes } = req.body;
     
@@ -288,10 +290,10 @@ const createReferral = async (req, res) => {
     console.error('Error creating referral:', error);
     res.status(500).json({ error: 'Failed to create referral' });
   }
-};
+});
 
 // Get referrals sent by this doctor
-const getSentReferrals = async (req, res) => {
+const getSentReferrals = asyncHandler(async (req, res) => {
   try {
     const referrals = await Referral.find({ fromDoctor: req.user._id })
       .populate('patient', 'name email age gender')
@@ -303,10 +305,10 @@ const getSentReferrals = async (req, res) => {
     console.error('Error getting sent referrals:', error);
     res.status(500).json({ error: 'Failed to get referrals' });
   }
-};
+});
 
 // Get referrals received by this doctor
-const getReceivedReferrals = async (req, res) => {
+const getReceivedReferrals = asyncHandler(async (req, res) => {
   try {
     const referrals = await Referral.find({ toDoctor: req.user._id })
       .populate('patient', 'name email age gender')
@@ -318,10 +320,10 @@ const getReceivedReferrals = async (req, res) => {
     console.error('Error getting received referrals:', error);
     res.status(500).json({ error: 'Failed to get referrals' });
   }
-};
+});
 
 // Update referral status (accept/decline)
-const updateReferralStatus = async (req, res) => {
+const updateReferralStatus = asyncHandler(async (req, res) => {
   try {
     const { referralId } = req.params;
     const { action } = req.params;
@@ -348,7 +350,44 @@ const updateReferralStatus = async (req, res) => {
     console.error(`Error ${req.params.action}ing referral:`, error);
     res.status(500).json({ error: `Failed to ${req.params.action} referral` });
   }
-};
+});
+
+// Add this function to your existing controller
+const changePassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  
+  if (!currentPassword || !newPassword) {
+    res.status(400);
+    throw new Error('Please provide current and new passwords');
+  }
+  
+  const doctor = await Doctor.findById(req.user._id);
+  
+  if (!doctor) {
+    res.status(404);
+    throw new Error('Doctor not found');
+  }
+  
+  // Check if current password matches
+  const isMatch = await doctor.matchPassword(currentPassword);
+  
+  if (!isMatch) {
+    res.status(401);
+    throw new Error('Current password is incorrect');
+  }
+  
+  // Update password
+  doctor.password = newPassword;
+  await doctor.save();
+  
+  // Generate new token
+  const token = generateToken(doctor._id);
+  
+  res.json({
+    message: 'Password updated successfully',
+    token
+  });
+});
 
 module.exports = {
   getDoctorProfile,
@@ -362,5 +401,6 @@ module.exports = {
   createReferral,
   getSentReferrals,
   getReceivedReferrals,
-  updateReferralStatus
+  updateReferralStatus,
+  changePassword
 };

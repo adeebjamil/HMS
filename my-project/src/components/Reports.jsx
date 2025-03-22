@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO, subDays } from 'date-fns';
+import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { Bar, Line, Pie } from 'react-chartjs-2';
 import { Chart, registerables } from 'chart.js';
+import * as XLSX from 'xlsx';
 
 // Register Chart.js components
 Chart.register(...registerables);
@@ -91,7 +92,6 @@ const generateMockData = (startDate, endDate, isMonthly) => {
 
 export default function Reports() {
   const [loading, setLoading] = useState(true);
-  const [reportType, setReportType] = useState('weekly');
   const [reportData, setReportData] = useState({
     patients: {},
     earnings: {},
@@ -107,17 +107,23 @@ export default function Reports() {
     totalPatients: 0,
     totalEarnings: 0,
     totalReferrals: 0,
-    completionRate: 0
+    completionRate: 0,
+    statusBreakdown: {
+      completed: 0,
+      upcoming: 0,
+      past: 0
+    }
   });
   const [dateRange, setDateRange] = useState({
-    start: format(startOfWeek(new Date()), 'yyyy-MM-dd'),
-    end: format(endOfWeek(new Date()), 'yyyy-MM-dd')
+    start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+    end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
   });
   const [error, setError] = useState(null);
+  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth()); // 0-11 for Jan-Dec
 
   useEffect(() => {
     fetchReportData();
-  }, [reportType, dateRange]);
+  }, [dateRange]);
 
   const getConfig = () => {
     const token = localStorage.getItem('token') || 
@@ -132,20 +138,16 @@ export default function Reports() {
     };
   };
 
-  const handleReportTypeChange = (type) => {
-    setReportType(type);
+  const changeMonth = (increment) => {
+    const newDate = new Date();
+    newDate.setMonth(currentMonth + increment);
     
-    if (type === 'weekly') {
-      setDateRange({
-        start: format(startOfWeek(new Date()), 'yyyy-MM-dd'),
-        end: format(endOfWeek(new Date()), 'yyyy-MM-dd')
-      });
-    } else if (type === 'monthly') {
-      setDateRange({
-        start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
-        end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
-      });
-    }
+    setCurrentMonth(newDate.getMonth());
+    
+    setDateRange({
+      start: format(startOfMonth(newDate), 'yyyy-MM-dd'),
+      end: format(endOfMonth(newDate), 'yyyy-MM-dd')
+    });
   };
 
   const fetchReportData = async () => {
@@ -153,30 +155,61 @@ export default function Reports() {
       setLoading(true);
       setError(null);
       
-      // Using mock data for development since endpoints don't exist
-      const mockData = generateMockData(dateRange.start, dateRange.end, reportType === 'monthly');
+      // Construct API URL with date parameters
+      const apiUrl = `/api/reports?startDate=${dateRange.start}&endDate=${dateRange.end}&type=monthly`;
       
-      // Process the mock data
-      const appointments = mockData.appointments;
-      const referrals = mockData.referrals;
+      // Make the API call
+      const response = await axios.get(apiUrl, getConfig());
+      const { appointments, referrals } = response.data;
+      
+      // Debug log to see the structure of appointments
+      console.log('First appointment data:', appointments.length > 0 ? appointments[0] : 'No appointments');
       
       // Calculate metrics
-      const completedAppointments = appointments.filter(app => app.status === 'Completed');
+      const completedAppointments = appointments.filter(app => 
+        app.status === 'Completed' || app.status === 'completed'
+      );
+      
       const totalPatients = completedAppointments.length;
-      const totalEarnings = completedAppointments.reduce((sum, app) => sum + (app.doctor?.fee || 0), 0);
+      
+      // Fix earnings calculation to handle different possible fee structures
+      const totalEarnings = completedAppointments.reduce((sum, app) => {
+        // Try different possible fee locations
+        const fee = 
+          (app.doctor?.fee) || 
+          (app.fee) || 
+          (app.payment?.amount) || 
+          (app.amount) || 
+          0;
+        
+        // If it's a string, convert to number
+        const numericFee = typeof fee === 'string' ? parseFloat(fee) : fee;
+        
+        // Log each appointment's fee for debugging
+        if (completedAppointments.length < 10) {
+          console.log(`Appointment ${app._id}: Fee = ${numericFee}`);
+        }
+        
+        return sum + (numericFee || 0);
+      }, 0);
+      
+      console.log(`Completed appointments: ${completedAppointments.length}, Total earnings: ${totalEarnings}`);
+      
       const totalReferrals = referrals.length;
       const completionRate = appointments.length > 0 ? 
         (completedAppointments.length / appointments.length * 100).toFixed(1) : 0;
       
+      const statusBreakdown = getAppointmentStatusBreakdown(appointments);
+
       setMetrics({
         totalPatients,
         totalEarnings,
         totalReferrals,
-        completionRate
+        completionRate,
+        statusBreakdown
       });
       
       // Prepare data for charts
-      // Group data by date
       const appointmentsByDate = groupDataByDate(appointments);
       const earningsByDate = groupEarningsByDate(appointments);
       const referralsByDate = groupDataByDate(referrals);
@@ -195,7 +228,7 @@ export default function Reports() {
     } catch (error) {
       console.error('Error fetching report data:', error);
       setError('Failed to load report data');
-      toast.error('Failed to load report data');
+      toast.error('Failed to load report data: ' + (error.response?.data?.message || error.message));
       
       // Set default empty data
       setReportData({
@@ -214,14 +247,21 @@ export default function Reports() {
         totalPatients: 0,
         totalEarnings: 0,
         totalReferrals: 0,
-        completionRate: 0
+        completionRate: 0,
+        statusBreakdown: {
+          completed: 0,
+          upcoming: 0,
+          past: 0
+        }
       });
     } finally {
       setLoading(false);
     }
   };
 
+  // All other helper functions remain the same...
   const groupDataByDate = (data) => {
+    // Same implementation
     const groupedData = {};
     
     if (!data || !Array.isArray(data) || data.length === 0) {
@@ -244,6 +284,7 @@ export default function Reports() {
   };
 
   const groupEarningsByDate = (appointments) => {
+    // Same implementation
     const earnings = {};
     
     if (!appointments || !Array.isArray(appointments) || appointments.length === 0) {
@@ -268,6 +309,7 @@ export default function Reports() {
   };
 
   const groupPatientsByDepartment = (appointments) => {
+    // Same implementation
     const departments = {};
     
     if (!appointments || !Array.isArray(appointments) || appointments.length === 0) {
@@ -286,6 +328,7 @@ export default function Reports() {
   };
 
   const groupAppointmentsByStatus = (appointments) => {
+    // Same implementation
     const statuses = {};
     
     if (!appointments || !Array.isArray(appointments) || appointments.length === 0) {
@@ -304,6 +347,7 @@ export default function Reports() {
   };
 
   const getBarChartData = (dataObject, label) => {
+    // Same implementation
     if (!dataObject || Object.keys(dataObject).length === 0) {
       return {
         labels: ['No Data'],
@@ -340,6 +384,7 @@ export default function Reports() {
   };
 
   const getPieChartData = (dataObject, label) => {
+    // Same implementation
     if (!dataObject || Object.keys(dataObject).length === 0) {
       return {
         labels: ['No Data'],
@@ -378,16 +423,34 @@ export default function Reports() {
     };
   };
 
+  const getAppointmentStatusBreakdown = (appointments) => {
+    // Same implementation
+    if (!appointments || !Array.isArray(appointments) || appointments.length === 0) {
+      return {
+        completed: 0,
+        upcoming: 0,
+        past: 0
+      };
+    }
+    
+    const now = new Date();
+    
+    return appointments.reduce((acc, app) => {
+      const appDate = new Date(app.appointmentDate);
+      
+      if (app.status === 'Completed') {
+        acc.completed += 1;
+      } else if (appDate > now) {
+        acc.upcoming += 1;
+      } else {
+        acc.past += 1;
+      }
+      
+      return acc;
+    }, { completed: 0, upcoming: 0, past: 0 });
+  };
+
   const exportToExcel = () => {
-    // This would normally use XLSX to generate an Excel file
-    // For now, let's just show a message since we're using mock data
-    toast.info('Export functionality would save report to Excel file');
-    
-    // If you want to implement this, add the XLSX package:
-    // npm install xlsx
-    // Then uncomment the code below:
-    
-    /*
     try {
       const { appointments, referrals } = reportData.rawData;
       
@@ -396,10 +459,14 @@ export default function Reports() {
       
       // Add sheets
       const summarySheet = XLSX.utils.json_to_sheet([
+        { 'Metric': 'Month', 'Value': format(new Date(dateRange.start), 'MMMM yyyy') },
         { 'Metric': 'Total Patients', 'Value': metrics.totalPatients },
         { 'Metric': 'Total Earnings', 'Value': `₹${metrics.totalEarnings}` },
         { 'Metric': 'Total Referrals', 'Value': metrics.totalReferrals },
-        { 'Metric': 'Completion Rate', 'Value': `${metrics.completionRate}%` }
+        { 'Metric': 'Completion Rate', 'Value': `${metrics.completionRate}%` },
+        { 'Metric': 'Completed Appointments', 'Value': metrics.statusBreakdown?.completed || 0 },
+        { 'Metric': 'Upcoming Appointments', 'Value': metrics.statusBreakdown?.upcoming || 0 },
+        { 'Metric': 'Past/Missed Appointments', 'Value': metrics.statusBreakdown?.past || 0 }
       ]);
       
       const appointmentSheet = XLSX.utils.json_to_sheet(
@@ -407,7 +474,9 @@ export default function Reports() {
           'Date': format(new Date(app.appointmentDate), 'yyyy-MM-dd'),
           'Patient': app.patient?.name || 'Unknown',
           'Status': app.status,
-          'Fee': app.doctor?.fee || 0
+          'Fee': app.doctor?.fee || 0,
+          'Department': app.doctor?.department || 'Unknown',
+          'Problem': app.problem || 'Not specified'
         }))
       );
       
@@ -415,8 +484,10 @@ export default function Reports() {
         referrals.map(ref => ({
           'Date': format(new Date(ref.referralDate || ref.createdAt), 'yyyy-MM-dd'),
           'Patient': ref.patient?.name || 'Unknown',
+          'From Doctor': ref.fromDoctor?.name || 'Unknown',
           'To Doctor': ref.toDoctor?.name || 'Unknown',
-          'Status': ref.status
+          'Status': ref.status,
+          'Notes': ref.notes || ''
         }))
       );
       
@@ -425,16 +496,15 @@ export default function Reports() {
       XLSX.utils.book_append_sheet(workbook, referralSheet, 'Referrals');
       
       // Generate filename
-      const filename = `doctor_report_${dateRange.start}_to_${dateRange.end}.xlsx`;
+      const filename = `monthly_report_${format(new Date(dateRange.start), 'yyyy_MM')}.xlsx`;
       
       // Save file
       XLSX.writeFile(workbook, filename);
       toast.success('Report downloaded successfully');
     } catch (error) {
       console.error('Error exporting to Excel:', error);
-      toast.error('Failed to download report');
+      toast.error('Failed to download report: ' + error.message);
     }
-    */
   };
 
   if (loading) {
@@ -460,48 +530,36 @@ export default function Reports() {
     );
   }
 
+  const currentMonthName = format(new Date(dateRange.start), 'MMMM yyyy');
+
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-        <div className="flex items-start">
-          <svg className="h-6 w-6 text-yellow-500 mr-2 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div>
-            <h3 className="text-sm font-medium text-yellow-800">Demo Mode</h3>
-            <p className="text-sm text-yellow-700 mt-1">
-              This is using randomly generated mock data for demonstration purposes. 
-              In a production environment, this would connect to your backend API.
-            </p>
-          </div>
-        </div>
-      </div>
-
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-primary-700">Doctor Performance Reports</h1>
+        <h1 className="text-3xl font-bold text-primary-700">Monthly Performance Report</h1>
         <div className="flex space-x-4">
+          {/* Month navigation */}
           <div className="inline-flex rounded-md shadow-sm" role="group">
             <button
-              onClick={() => handleReportTypeChange('weekly')}
-              className={`px-4 py-2 text-sm font-medium rounded-l-lg ${
-                reportType === 'weekly' 
-                  ? 'bg-primary-600 text-white' 
-                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-              }`}
+              onClick={() => changeMonth(-1)}
+              className="px-3 py-2 text-sm font-medium rounded-l-lg bg-primary-100 text-primary-700 hover:bg-primary-200"
             >
-              Weekly
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
             </button>
+            <span className="px-4 py-2 bg-primary-600 text-white font-medium flex items-center">
+              {currentMonthName}
+            </span>
             <button
-              onClick={() => handleReportTypeChange('monthly')}
-              className={`px-4 py-2 text-sm font-medium rounded-r-lg ${
-                reportType === 'monthly' 
-                  ? 'bg-primary-600 text-white' 
-                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-              }`}
+              onClick={() => changeMonth(1)}
+              className="px-3 py-2 text-sm font-medium rounded-r-lg bg-primary-100 text-primary-700 hover:bg-primary-200"
             >
-              Monthly
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             </button>
           </div>
+          
           <button
             onClick={exportToExcel}
             className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
@@ -512,10 +570,6 @@ export default function Reports() {
             Download Excel
           </button>
         </div>
-      </div>
-      
-      <div className="text-sm text-gray-600 mb-6">
-        Showing data from {format(new Date(dateRange.start), 'MMMM d, yyyy')} to {format(new Date(dateRange.end), 'MMMM d, yyyy')}
       </div>
       
       {/* Metrics Summary Cards */}
@@ -658,9 +712,28 @@ export default function Reports() {
           </div>
         </div>
       </div>
+
+      {/* Appointment Status Breakdown */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h2 className="text-xl font-semibold text-gray-800 mb-4">Appointment Status Breakdown</h2>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center p-4 bg-blue-50 rounded-lg">
+            <p className="text-3xl font-bold text-blue-700">{metrics.statusBreakdown?.completed || 0}</p>
+            <p className="text-sm text-blue-600 mt-1">Completed</p>
+          </div>
+          <div className="text-center p-4 bg-green-50 rounded-lg">
+            <p className="text-3xl font-bold text-green-700">{metrics.statusBreakdown?.upcoming || 0}</p>
+            <p className="text-sm text-green-600 mt-1">Upcoming</p>
+          </div>
+          <div className="text-center p-4 bg-yellow-50 rounded-lg">
+            <p className="text-3xl font-bold text-yellow-700">{metrics.statusBreakdown?.past || 0}</p>
+            <p className="text-sm text-yellow-600 mt-1">Past/Missed</p>
+          </div>
+        </div>
+      </div>
       
       <div className="mt-12 text-center text-sm text-gray-500">
-        This report is based on completed appointments and referrals within the selected date range.
+        This report shows monthly data for {currentMonthName}.
         <br />
         Click "Download Excel" for a detailed breakdown of all data.
       </div>
